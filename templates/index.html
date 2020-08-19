@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Последние обновления на сайте{% endblock %}
+{% block header %}<h1>Последние обновления на сайте</h1>{% endblock %}
+{% load cache %}
+{% block content %}
+    {% cache 10 index_page %}
+    {% for post in page %}
+    {% include "includes/post_item.html" with post=post %}
+    {% endfor %}
+    {% endcache %}
+
+    {% if page.has_other_pages %}
+    {% include "includes/paginator.html" with items=page paginator=paginator %}
+    {% endif %}
+{% endblock %}

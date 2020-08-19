@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Проcмотр записи{% endblock %}
+{% block header %}<h1>Просмотр записи</h1>{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+        <div class="row">
+            {% include "includes/profile_block.html" %}
+            <div class="col-md-9">
+                {% include "includes/post_item.html" with post=post %}
+                {% include "includes/comments.html" with post=post %}
+            </div>
+        </div>
+    </main>
+
+{% endblock %}

@@ -1,0 +1,6 @@
+{% url 'about-author' as about_author_url %}
+{% url 'about-spec' as about_spec_url %}
+<footer class="pt-4 my-md-5 pt-md-5 border-top">
+        <p class="m-0 text-dark text-center "><a href="{{ about_author_url }}">Об авторе</a> - <a href="{{ about_spec_url }}">Технологии</a></p>
+        <p class="m-0 text-dark text-center ">Социальная сеть <span style="color:red">Ya</span>tube © {% now "Y" %}, все права защищены.</p>
+</footer>
