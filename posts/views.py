@@ -75,15 +75,17 @@ def profile(request, username):
 
 def post_view(request, username, post_id):
     post = get_object_or_404(
-        Post.objects.select_related('author', 'group').
-        prefetch_related('comments__author'),
+        Post.objects.select_related('author', 'group'),
         author__username=username, pk=post_id
     )
+
+    comments = post.comments.all().select_related('author')
 
     return render(request, 'post.html', {
         'post': post,
         'author': post.author,
-        'form': CommentForm()
+        'form': CommentForm(),
+        'comments': comments
     })
 
 
@@ -118,7 +120,7 @@ def add_comment(request, username, post_id):
 
 @login_required
 def follow_index(request):
-    authors = User.objects.filster(following__in=request.user.follower.all())
+    authors = User.objects.filter(following__in=request.user.follower.all())
     post_list = Post.objects.filter(author__in=authors.all()).all(). \
         select_related('author', 'group').prefetch_related('comments')
     paginator = Paginator(post_list, 10)
