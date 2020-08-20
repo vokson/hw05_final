@@ -5,7 +5,7 @@
 
     <main role="main" class="container">
         <div class="row">
-            {% include "includes/profile_block.html" with post=post %}
+            {% include "includes/profile_block.html" with author=author following=following %}
 
             <div class="col-md-9">
                 {% for post in page %}

@@ -1,23 +1,19 @@
 import os
 import shutil
-import time
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.core.files.storage import default_storage
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
-from django.conf import settings
-from django.core.files.storage import default_storage
-from django.core.cache import cache
 
-from .models import Group, Post
+from .models import Comment, Follow, Group, Post
 
 User = get_user_model()
 
 
-@override_settings(
-    MEDIA_ROOT=os.path.join(settings.BASE_DIR, 'media', 'tests'),
-    # CACHES={}
-)
+@override_settings(MEDIA_ROOT=os.path.join(settings.BASE_DIR, 'media', 'tests'))
 class TestPost(TestCase):
     @classmethod
     def setUpClass(self):
@@ -186,27 +182,96 @@ class TestPost(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Post.objects.count(), 0)
 
-    # @override_settings(CACHE_MIDDLEWARE_SECONDS=0)
     def test_cached_index_page(self):
         Post.objects.create(group=self.group, author=self.user, text='TEST_TEXT_1')
         response = self.authorized_client.get(self.urls['index'])
-        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertContains(response, 'TEST_TEXT', 1, 200)
 
-        self.assertNotEqual(cache.get('index_page', 'nothing'), 'nothing')
+        Post.objects.create(group=self.group, author=self.user, text='TEST_TEXT_2')
+        response = self.authorized_client.get(self.urls['index'])
+        self.assertContains(response, 'TEST_TEXT', 1, 200)
 
-        # Post.objects.create(group=self.group, author=self.user, text='TEST_TEXT_2')
-        # response = self.authorized_client.get(self.urls['index'])
-        # self.assertEqual(response.context['paginator'].count, 1)
+        cache.clear()
 
-        # time.sleep(3)
-
-        # response = self.authorized_client.get(self.urls['index'])
-        # self.assertEqual(response.context['paginator'].count, 2)
-
-    # def test_cache(self):
-    #     cache.set('my_key', 'hello', 3)
-    #     self.assertEqual(cache.get('my_key', 'expired'), 'hello')
-    #     time.sleep(3)
-    #     self.assertEqual(cache.get('my_key', 'expired'), 'expired')
+        response = self.authorized_client.get(self.urls['index'])
+        self.assertContains(response, 'TEST_TEXT', 2, 200)
 
 
+@override_settings(MEDIA_ROOT=os.path.join(settings.BASE_DIR, 'media', 'tests'))
+class TestFollow(TestCase):
+    @classmethod
+    def setUpClass(self):
+        super().setUpClass()
+
+        self.authorized_client_1 = Client()
+        self.authorized_client_2 = Client()
+        self.user_1 = User.objects.create_user(username='test_user_1')
+        self.user_2 = User.objects.create_user(username='test_user_2')
+
+        self.authorized_client_1.force_login(self.user_1)
+        self.authorized_client_2.force_login(self.user_2)
+
+    def test_authorized_user_may_subscribe(self):
+        response = self.authorized_client_1.get(
+            reverse('profile_follow', args=[self.user_2.username]), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(Follow.objects.filter(user=self.user_1, author=self.user_2).count(), 1)
+
+    def test_authorized_user_may_unsubscribe(self):
+        response = self.authorized_client_1.get(
+            reverse('profile_follow', args=[self.user_2.username]), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.authorized_client_1.get(
+            reverse('profile_unfollow', args=[self.user_2.username]), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(Follow.objects.filter(user=self.user_1, author=self.user_2).count(), 0)
+
+    def test_following_post_is_published_for_subscribed_users(self):
+        Follow.objects.create(user=self.user_1, author=self.user_2)
+        Post.objects.create(group=None, author=self.user_2, text='TEST_TEXT')
+
+        response = self.authorized_client_1.get(reverse('follow_index'))
+        post = response.context['page'][0]
+        self.assertEqual(post.author, self.user_2)
+        self.assertEqual(post.text, 'TEST_TEXT')
+
+
+@override_settings(MEDIA_ROOT=os.path.join(settings.BASE_DIR, 'media', 'tests'))
+class TestComment(TestCase):
+    @classmethod
+    def setUpClass(self):
+        super().setUpClass()
+
+        self.authorized_client = Client()
+        self.unauthorized_client = Client()
+
+        self.user = User.objects.create_user(username='test_user')
+        self.authorized_client.force_login(self.user)
+
+        self.post = Post.objects.create(author=self.user, text='TEST_TEXT')
+        self.add_comment_url = reverse('add_comment', args=[self.user.username, self.post.pk])
+
+    def test_authorized_user_may_comment(self):
+        response = self.authorized_client.post(
+            self.add_comment_url, {'text': 'COMMENT_TEXT'}, follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Comment.objects.count(), 1)
+
+        comment = Comment.objects.first()
+        self.assertEqual(comment.author, self.user)
+        self.assertEqual(comment.post, self.post)
+        self.assertEqual(comment.text, 'COMMENT_TEXT')
+
+    def test_unauthorized_user_may_not_comment(self):
+        response = self.unauthorized_client.post(
+            self.add_comment_url, {'text': 'COMMENT_TEXT'}, follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Comment.objects.count(), 0)

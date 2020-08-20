@@ -1,15 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Последние обновления на сайте{% endblock %}
-{% load cache %}
+{% block title %}Последние обновления в подписке{% endblock %}
 {% block content %}
     <div class="container">
-        {% include "includes/menu.html" with index=True %}
-        <h1>Последние обновления на сайте</h1>
-            {% cache 10 index_page %}
+        {% include "includes/menu.html" with follow=True %}
+        <h1>Последние обновления в подписке</h1>
             {% for post in page %}
                 {% include "includes/post_item.html" with post=post %}
             {% endfor %}
-            {% endcache %}
 
             {% if page.has_other_pages %}
                 {% include "includes/paginator.html" with items=page paginator=paginator %}

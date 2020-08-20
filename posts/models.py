@@ -59,3 +59,17 @@ class Comment(models.Model):
         short_text = self.text[:10]
         author_name = str(self.author)
         return f'{author_name}: {short_text}'
+
+
+class Follow(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='follower',
+        verbose_name='Подписчик', help_text='Кто подписывается?'
+    )
+    author = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='following',
+        verbose_name='Автор', help_text='На кого подписываются?'
+    )
+
+    def __str__(self) -> str:
+        return f'{self.user.username} -> {self.author.username}'
