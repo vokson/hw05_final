@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.cache import cache_page
 
 from .forms import CommentForm, PostForm
 from .models import Follow, Group, Post
@@ -17,8 +18,9 @@ def server_error(request):
     return render(request, 'misc/500.html', status=500)
 
 
+@cache_page(20)
 def index(request):
-    post_list = Post.objects.all().select_related('author', 'group').prefetch_related('comments')
+    post_list = Post.objects.select_related('author', 'group').prefetch_related('comments').all()
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)
@@ -27,7 +29,7 @@ def index(request):
 
 def group_posts(request, slug):
     group = get_object_or_404(Group, slug=slug)
-    post_list = group.posts.all().select_related('author', 'group').prefetch_related('comments')
+    post_list = group.posts.select_related('author', 'group').prefetch_related('comments').all()
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)
@@ -54,7 +56,7 @@ def profile(request, username):
         User.objects.prefetch_related('posts', 'following', 'follower'),
         username=username
     )
-    post_list = author.posts.all().select_related('author', 'group').prefetch_related('comments')
+    post_list = author.posts.select_related('author', 'group').prefetch_related('comments').all()
 
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
@@ -79,7 +81,7 @@ def post_view(request, username, post_id):
         author__username=username, pk=post_id
     )
 
-    comments = post.comments.all().select_related('author')
+    comments = post.comments.select_related('author').all()
 
     return render(request, 'post.html', {
         'post': post,
@@ -115,14 +117,13 @@ def add_comment(request, username, post_id):
         form.instance.post = post
         form.save()
 
-    return redirect('post', username=post.author.username, post_id=post.pk)
+    return redirect('post', username=username, post_id=post_id)
 
 
 @login_required
 def follow_index(request):
-    authors = User.objects.filter(following__in=request.user.follower.all())
-    post_list = Post.objects.filter(author__in=authors.all()).all(). \
-        select_related('author', 'group').prefetch_related('comments')
+    post_list = Post.objects.filter(author__following__user=request.user). \
+        select_related('author', 'group').prefetch_related('comments').all()
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)
@@ -132,11 +133,9 @@ def follow_index(request):
 @login_required
 def profile_follow(request, username):
     author = get_object_or_404(User, username=username)
-    if author != request.user:
-        is_exists = (Follow.objects.filter(user=request.user, author=author).count() == 0)
-        if is_exists is True:
-            follow = Follow(user=request.user, author=author)
-            follow.save()
+    is_exist = Follow.objects.filter(user=request.user, author=author).exists()
+    if author != request.user and not is_exist:
+        Follow.objects.create(user=request.user, author=author)
 
     return redirect('profile', username=username)
 
@@ -144,9 +143,6 @@ def profile_follow(request, username):
 @login_required
 def profile_unfollow(request, username):
     author = get_object_or_404(User, username=username)
-    if author != request.user:
-        is_exists = (Follow.objects.filter(user=request.user, author=author).count() == 0)
-        if is_exists is False:
-            Follow.objects.filter(user=request.user, author=author).delete()
+    Follow.objects.filter(user=request.user, author=author).delete()
 
     return redirect('profile', username=username)
