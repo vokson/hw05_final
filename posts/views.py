@@ -10,7 +10,7 @@ from .models import Follow, Group, Post
 User = get_user_model()
 
 
-def page_not_found(request, exception):
+def page_not_found(request, exception):  # noqa
     return render(request, 'misc/404.html', {'path': request.path}, status=404)
 
 
@@ -18,7 +18,7 @@ def server_error(request):
     return render(request, 'misc/500.html', status=500)
 
 
-@cache_page(20)
+@cache_page(20, key_prefix='index_page')
 def index(request):
     post_list = Post.objects.select_related('author', 'group').prefetch_related('comments').all()
     paginator = Paginator(post_list, 10)
@@ -63,9 +63,9 @@ def profile(request, username):
     page = paginator.get_page(page_number)
 
     if request.user.is_anonymous:
-        following = False
+        following = None
     else:
-        following = (Follow.objects.filter(user=request.user, author=author).count() > 0)
+        following = Follow.objects.filter(user=request.user, author=author).exists()
 
     return render(request, 'profile.html', {
         'page': page,
@@ -122,8 +122,13 @@ def add_comment(request, username, post_id):
 
 @login_required
 def follow_index(request):
-    post_list = Post.objects.filter(author__following__user=request.user). \
-        select_related('author', 'group').prefetch_related('comments').all()
+    post_list = Post.objects.filter(
+        author__following__user=request.user
+    ).select_related(
+        'author', 'group'
+    ).prefetch_related(
+        'comments'
+    ).all()
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)

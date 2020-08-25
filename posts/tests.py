@@ -1,4 +1,3 @@
-
 import os
 import shutil
 from io import BytesIO
@@ -17,12 +16,10 @@ from .models import Comment, Follow, Group, Post
 User = get_user_model()
 
 
-@override_settings(MEDIA_ROOT=os.path.join(settings.BASE_DIR, 'media', 'tests'))
+@override_settings(MEDIA_ROOT=os.path.join(settings.BASE_DIR, 'media_test'))
 class TestPost(TestCase):
     @classmethod
-    def setUpClass(self):
-        super().setUpClass()
-
+    def setUpTestData(self):
         self.authorized_client_1 = Client()
         self.authorized_client_2 = Client()
         self.user_1 = User.objects.create_user(username='test_user_1')
@@ -52,7 +49,7 @@ class TestPost(TestCase):
     def setUp(self):
         cache.clear()
         try:
-            shutil.rmtree(os.path.join(settings.MEDIA_ROOT, 'posts'))
+            shutil.rmtree(os.path.join(settings.BASE_DIR, 'media_test'))
         except OSError:
             pass
 
@@ -64,23 +61,30 @@ class TestPost(TestCase):
         return File(file_obj, name=name)
 
     def test_profile(self):
-        response = self.authorized_client_1.get(self.urls['profile'])
+        response = self.unauthorized_client.get(self.urls['profile'])
         self.assertEqual(response.status_code, 200)
 
     def test_new_post_with_authorized_user(self):
         response = self.authorized_client_1.post(
             self.urls['new_post'],
-            {'group': self.group.pk, 'text': 'TEST_TEXT_AUTHORIZED'},
+            {
+                'group': self.group.pk,
+                'text': 'TEST_TEXT_AUTHORIZED',
+                'image': SimpleUploadedFile(self.img_name, self.image.file.getvalue())
+            },
             follow=True
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Post.objects.count(), 1)
 
-        post = Post.objects.first()
-        self.assertEqual(post.author, self.user_1)
-        self.assertEqual(post.group, self.group)
-        self.assertEqual(post.text, 'TEST_TEXT_AUTHORIZED')
+        self.compare_post_attributes(
+            Post.objects.first(),
+            self.user_1,
+            self.group,
+            'TEST_TEXT_AUTHORIZED',
+            f'posts/{self.img_name}'
+        )
 
     def test_new_post_with_unauthorized_user(self):
         url_new_post = self.urls['new_post']
@@ -117,10 +121,12 @@ class TestPost(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Post.objects.count(), 1)
 
-        post = Post.objects.first()
-        self.assertEqual(post.author, self.user_1)
-        self.assertEqual(post.group, self.group_test_edit)
-        self.assertEqual(post.text, 'TEST_TEXT_EDITED')
+        self.compare_post_attributes(
+            Post.objects.first(),
+            self.user_1,
+            self.group_test_edit,
+            'TEST_TEXT_EDITED'
+        )
 
     def test_post_edit_is_published(self):
         post = Post.objects.create(group=self.group, author=self.user_1, text='TEST_TEXT')
@@ -148,14 +154,23 @@ class TestPost(TestCase):
                 else:
                     post = ctx['post']
 
-                self.assertEqual(post.author, self.user_1)
-                self.assertEqual(post.group, correct_group)
-                self.assertEqual(post.text, correct_text)
-                if correct_img is not None:
-                    self.assertEqual(post.image, correct_img)
+                self.compare_post_attributes(
+                    post,
+                    self.user_1,
+                    correct_group,
+                    correct_text,
+                    correct_img
+                )
+
+    def compare_post_attributes(self, post, author, group, text, img=None):
+        self.assertEqual(post.author, author)
+        self.assertEqual(post.group, group)
+        self.assertEqual(post.text, text)
+        if img is not None:
+            self.assertEqual(post.image, img)
 
     def test_check_404(self):
-        response = self.authorized_client_1.get('/404/')
+        response = self.unauthorized_client.get('/404/')
         self.assertEqual(response.status_code, 404)
 
     def test_is_post_with_picture_published(self):
@@ -171,28 +186,9 @@ class TestPost(TestCase):
         ]
 
         for url in urls:
-            response = self.unauthorized_client.get(url)
-            self.assertContains(response, '<img', 1, 200)
-
-    def test_new_post_with_picture_with_authorized_user(self):
-        response = self.authorized_client_1.post(
-            self.urls['new_post'],
-            {
-                'group': self.group.pk,
-                'text': 'TEST_TEXT_AUTHORIZED',
-                'image': SimpleUploadedFile(self.img_name, self.image.file.getvalue())
-            },
-            follow=True
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Post.objects.count(), 1)
-
-        post = Post.objects.first()
-        self.assertEqual(post.author, self.user_1)
-        self.assertEqual(post.group, self.group)
-        self.assertEqual(post.text, 'TEST_TEXT_AUTHORIZED')
-        self.assertEqual(f'posts/{self.img_name}', post.image)
+            with self.subTest(url=url):
+                response = self.unauthorized_client.get(url)
+                self.assertContains(response, '<img', 1, 200)
 
     def test_new_post_with_bad_picture_with_authorized_user(self):
         response = self.authorized_client_1.post(
@@ -200,28 +196,44 @@ class TestPost(TestCase):
             {
                 'group': self.group.pk,
                 'text': 'TEST_TEXT_AUTHORIZED',
-                'image': SimpleUploadedFile(self.img_name, b'WRONG_FILE')
+                'image': SimpleUploadedFile(self.img_name, b'WRONG_FILE', 'image/jpeg')
             },
             follow=True
         )
 
+        error_text = 'Загрузите правильное изображение. ' \
+            'Файл, который вы загрузили, поврежден или не является изображением.'
+
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(len(response.context['form'].errors) > 0)
+        self.assertFormError(
+            response,
+            'form',
+            'image',
+            error_text
+        )
 
     def test_cached_index_page(self):
         Post.objects.create(group=self.group, author=self.user_1, text='TEST_TEXT_1')
-        response = self.authorized_client_1.get(self.urls['index'])
+        response = self.unauthorized_client.get(self.urls['index'])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['paginator'].count, 1)
+        self.assertIsNotNone(response.context['page'])
+        self.compare_post_attributes(
+            response.context['page'][0],
+            self.user_1,
+            self.group,
+            'TEST_TEXT_1'
+        )
+        cached_content = response.content
 
         Post.objects.create(group=self.group, author=self.user_1, text='TEST_TEXT_2')
-        response = self.authorized_client_1.get(self.urls['index'])
+        response = self.unauthorized_client.get(self.urls['index'])
         self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context)
+        self.assertEqual(response.content, cached_content)
 
         cache.clear()
 
-        response = self.authorized_client_1.get(self.urls['index'])
+        response = self.unauthorized_client.get(self.urls['index'])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['paginator'].count, 2)
 
@@ -250,19 +262,22 @@ class TestPost(TestCase):
 
         response = self.authorized_client_1.get(reverse('follow_index'))
         self.assertIsNotNone(response.context['paginator'])
-        self.assertEquals(response.context['paginator'].count, 1)
+        self.assertEqual(response.context['paginator'].count, 1)
         self.assertIsNotNone(response.context['page'])
-        post = response.context['page'][0]
-        self.assertEqual(post.author, self.user_2)
-        self.assertEqual(post.text, 'TEST_TEXT')
-        self.assertEqual(post.image, f'posts/{self.img_name}')
+        self.compare_post_attributes(
+            response.context['page'][0],
+            self.user_2,
+            None,
+            'TEST_TEXT',
+            f'posts/{self.img_name}'
+        )
 
     def test_following_post_is_not_published_for_unsubscribed_users(self):
         Post.objects.create(group=None, author=self.user_2, text='TEST_TEXT', image=self.image)
 
         response = self.authorized_client_1.get(reverse('follow_index'))
         self.assertIsNotNone(response.context['paginator'])
-        self.assertEquals(response.context['paginator'].count, 0)
+        self.assertEqual(response.context['paginator'].count, 0)
 
     def test_authorized_user_may_comment(self):
         post = Post.objects.create(author=self.user_1, text='TEST_TEXT')

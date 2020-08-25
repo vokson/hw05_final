@@ -75,4 +75,6 @@ class Follow(models.Model):
         unique_together = ['user', 'author']
 
     def __str__(self) -> str:
-        return f'{self.user.username} -> {self.author.username}'
+        follower = self.user.username
+        following = self.author.username
+        return f'{follower} -> {following}'

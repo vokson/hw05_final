@@ -18,6 +18,7 @@ __pycache__/
 
 static/
 media/
+media_test/
 posts/static/
 sent_emails/
 sent_emails/*
