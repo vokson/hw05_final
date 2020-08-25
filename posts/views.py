@@ -29,7 +29,7 @@ def index(request):
 
 def group_posts(request, slug):
     group = get_object_or_404(Group, slug=slug)
-    post_list = group.posts.select_related('author', 'group').prefetch_related('comments').all()
+    post_list = group.posts.select_related('author').prefetch_related('comments').all()
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)

@@ -12,12 +12,24 @@
             </a>
             {{ post.text|linebreaksbr }}
         </p>
+
         
-        {% if post.group %}
-        <a class="card-link muted" href="{% url 'group_posts' post.group.slug %}">
-                <strong class="d-block text-gray-dark">#{{ post.group.title }}</strong>
+        {% if post.group or group %}
+        <a class="card-link muted" href="
+            {% if group %}
+                {% url 'group_posts' group.slug %}
+            {% else %}
+                {% url 'group_posts' post.group.slug %}
+            {% endif %}">
+                <strong class="d-block text-gray-dark">#
+                {% if group %}
+                    {{ group.title }}
+                {% else %}
+                    {{ post.group.title }}
+                {% endif %}
+                </strong>
         </a>
-        {% endif %}
+        {% endif %} 
         
         <div class="d-flex justify-content-between align-items-center">
             <div class="btn-group ">
