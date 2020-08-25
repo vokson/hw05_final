@@ -35,7 +35,8 @@ def group_posts(request, slug):
     page = paginator.get_page(page_number)
     return render(request, 'group.html', {
         'page': page,
-        'paginator': paginator
+        'paginator': paginator,
+        'group': group
     })
 
 
@@ -62,10 +63,10 @@ def profile(request, username):
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)
 
-    if request.user.is_anonymous:
-        following = None
-    else:
-        following = Follow.objects.filter(user=request.user, author=author).exists()
+    following = request.user.is_authenticated and Follow.objects.filter(
+        user=request.user,
+        author=author
+    ).exists()
 
     return render(request, 'profile.html', {
         'page': page,

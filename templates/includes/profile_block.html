@@ -20,7 +20,7 @@
                     Записей: {{ author.posts.count }}
                 </div>
             </li>
-            {% if user.username != author.username and following is not None %}
+            {% if user.username != author.username and user.is_authenticated %}
             <li class="list-group-item">
                 {% if following %}
                 <a class="btn btn-lg btn-light" href="{% url 'profile_unfollow' author.username %}" role="button"> 
