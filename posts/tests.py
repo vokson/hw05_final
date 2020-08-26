@@ -48,6 +48,8 @@ class TestPost(TestCase):
 
     def setUp(self):
         cache.clear()
+
+    def tearDown(self):
         try:
             shutil.rmtree(os.path.join(settings.BASE_DIR, 'media_test'))
         except OSError:
@@ -201,8 +203,8 @@ class TestPost(TestCase):
             follow=True
         )
 
-        error_text = 'Загрузите правильное изображение. ' \
-            'Файл, который вы загрузили, поврежден или не является изображением.'
+        error_text = ('Загрузите правильное изображение. '
+                      'Файл, который вы загрузили, поврежден или не является изображением.')
 
         self.assertEqual(response.status_code, 200)
         self.assertFormError(
